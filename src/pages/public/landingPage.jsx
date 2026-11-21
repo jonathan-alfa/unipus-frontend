@@ -27,12 +27,15 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const totalAvailableStock = books.reduce(
+  const publishedBooks = books.filter(
+    (b) => b.is_active !== false && b.coded_count > 0
+  );
+  const totalAvailableStock = publishedBooks.reduce(
     (sum, b) => sum + Number(b.available_stock || 0),
     0
   );
   // Show partial catalog preview (4 books) on the landing page
-  const previewBooks = books.slice(0, 4);
+  const previewBooks = publishedBooks.slice(0, 4);
 
   const handleCatalogAccess = (targetUrl = '/books') => {
     if (!isAuthenticated) {
@@ -116,7 +119,7 @@ export default function LandingPage() {
               <div className="mt-8 grid grid-cols-3 gap-3 max-w-xl mx-auto lg:mx-0">
                 <div className="rounded-2xl border border-[#89CFF3]/70 bg-white/85 p-3 text-center lg:text-left">
                   <p className="text-lg sm:text-xl font-extrabold text-[#00A9FF]">
-                    {books.length}+ Judul
+                    {publishedBooks.length}+ Judul
                   </p>
                   <p className="text-[11px] font-semibold text-slate-500">Koleksi Buku</p>
                 </div>
@@ -331,7 +334,7 @@ export default function LandingPage() {
             onClick={() => handleCatalogAccess('/books')}
             className="btn-secondary self-start sm:self-auto"
           >
-            View All Katalog ({books.length})
+            View All Katalog ({publishedBooks.length})
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -351,7 +354,7 @@ export default function LandingPage() {
             className="btn-primary px-8 py-3.5 text-sm shadow-glow"
           >
             <BookOpen className="h-4 w-4" />
-            View All — Lihat Seluruh Katalog Buku ({books.length} Koleksi)
+            View All — Lihat Seluruh Katalog Buku ({publishedBooks.length} Koleksi)
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>

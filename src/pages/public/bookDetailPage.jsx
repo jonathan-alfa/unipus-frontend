@@ -49,7 +49,13 @@ export default function BookDetailPage() {
   const inCart = isInCart(book.id);
   const isAvailable = Number(book.available_stock) > 0;
   const relatedBooks = books
-    .filter((b) => b.category_id === book.category_id && b.id !== book.id)
+    .filter(
+      (b) =>
+        b.category_id === book.category_id &&
+        b.id !== book.id &&
+        b.is_active !== false &&
+        b.coded_count > 0
+    )
     .slice(0, 4);
 
   const handleDirectBorrow = async (e) => {
@@ -178,7 +184,7 @@ export default function BookDetailPage() {
               <div className="border-t border-slate-100 pt-6">
                 {!isAvailable ? (
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700">
-                    Maaf, seluruh stok eksemplar buku ini sedang dipinjam. Anda hanya dapat mengajukan peminjaman apabila stok tersedia (Aturan Bisnis #3).
+                    Maaf, seluruh stok eksemplar buku ini sedang dipinjam. Anda hanya dapat mengajukan peminjaman apabila stok tersedia.
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3 sm:flex-row">

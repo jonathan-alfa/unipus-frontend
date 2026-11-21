@@ -19,11 +19,11 @@ import LoanStatusBadge from '../../components/common/loanStatusBadge';
 import LoanDetailModal from '../../components/loans/loanDetailModal';
 
 export default function AdminDashboardPage() {
-  const { books, loans, activityLogs } = useLibrary();
+  const { books, loans } = useLibrary();
   const { users } = useAuth();
   const [selectedLoan, setSelectedLoan] = useState(null);
 
-  // 6 KPI Metrics matching PRD Section 6.6
+  // 6 KPI Metrics
   const totalBooks = books.length;
   const totalAvailableStock = books.reduce(
     (sum, b) => sum + Number(b.available_stock || 0),
@@ -32,6 +32,7 @@ export default function AdminDashboardPage() {
   const totalRegisteredUsers = users.length;
   const totalActiveLoans = loans.filter(
     (l) =>
+      l.status === LOAN_STATUS.APPROVED ||
       l.status === LOAN_STATUS.BORROWED ||
       l.status === LOAN_STATUS.OVERDUE ||
       l.status === LOAN_STATUS.RETURN_REQUESTED
@@ -44,6 +45,55 @@ export default function AdminDashboardPage() {
   ).length;
 
   const recentLoans = loans.slice(0, 6);
+
+  const statusActivityMap = {
+    [LOAN_STATUS.PENDING]: {
+      badge: 'PENGAJUAN BARU',
+      verb: 'mengajukan peminjaman',
+    },
+    [LOAN_STATUS.APPROVED]: {
+      badge: 'DISETUJUI',
+      verb: 'disetujui untuk peminjaman',
+    },
+    [LOAN_STATUS.BORROWED]: {
+      badge: 'DIPINJAM',
+      verb: 'sedang meminjam',
+    },
+    [LOAN_STATUS.RETURN_REQUESTED]: {
+      badge: 'AJUKAN KEMBALI',
+      verb: 'mengajukan pengembalian',
+    },
+    [LOAN_STATUS.RETURNED]: {
+      badge: 'DIKEMBALIKAN',
+      verb: 'menyelesaikan pengembalian',
+    },
+    [LOAN_STATUS.REJECTED]: {
+      badge: 'DITOLAK',
+      verb: 'ditolak pengajuan peminjaman',
+    },
+    [LOAN_STATUS.CANCELLED]: {
+      badge: 'DIBATALKAN',
+      verb: 'membatalkan pengajuan',
+    },
+    [LOAN_STATUS.OVERDUE]: {
+      badge: 'TERLAMBAT',
+      verb: 'melewati batas pengembalian',
+    },
+  };
+
+  const liveActivities = loans.slice(0, 8).map((loan) => {
+    const info = statusActivityMap[loan.status] || {
+      badge: String(loan.status || 'AKTIVITAS').toUpperCase(),
+      verb: 'memperbarui transaksi',
+    };
+    const bookCount = loan.total_books || loan.items?.length || 0;
+    return {
+      id: `loan-act-${loan.id}`,
+      badge: info.badge,
+      description: `${loan.user_name} ${info.verb} ${bookCount} buku (${loan.transaction_code}).`,
+      timestamp: loan.updated_at || loan.created_at,
+    };
+  });
 
   return (
     <div className="space-y-8">
@@ -105,7 +155,7 @@ export default function AdminDashboardPage() {
           {
             label: 'Total Peminjaman Aktif',
             value: totalActiveLoans,
-            sub: 'Berstatus Borrowed / Overdue',
+            sub: 'Disetujui, Dipinjam, atau Terlambat',
             icon: BookCheck,
             link: '/admin/active-loans',
             color: 'bg-sky-50 text-sky-600',
@@ -225,33 +275,41 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Activity Logs (PRD 10.7) */}
+        {/* Activity Logs */}
         <div className="lg:col-span-4 card-surface p-6">
           <div className="mb-4 flex items-center gap-2">
             <Activity className="h-4 w-4 text-[#00A9FF]" />
             <h2 className="text-base font-extrabold text-slate-900">
-              Log Aktivitas Sistem
+              Log Aktivitas Transaksi
             </h2>
           </div>
 
-          <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
-            {activityLogs.slice(0, 8).map((log) => (
-              <div
-                key={log.id}
-                className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-xs"
-              >
-                <span className="inline-block rounded-md bg-[#CDF5FD] px-2 py-0.5 font-mono text-[10px] font-bold text-[#0088CC]">
-                  {log.activity}
-                </span>
-                <p className="mt-1.5 font-medium text-slate-800 leading-relaxed">
-                  {log.description}
-                </p>
-                <span className="mt-1 block text-[10px] text-slate-400">
-                  {formatDateTime(log.created_at)}
-                </span>
-              </div>
-            ))}
-          </div>
+          {liveActivities.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 py-10 text-center px-4">
+              <p className="text-xs text-slate-500">
+                Belum ada aktivitas transaksi tercatat.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
+              {liveActivities.map((log) => (
+                <div
+                  key={log.id}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-xs"
+                >
+                  <span className="inline-block rounded-md bg-[#CDF5FD] px-2 py-0.5 font-mono text-[10px] font-bold text-[#0088CC]">
+                    {log.badge}
+                  </span>
+                  <p className="mt-1.5 font-medium text-slate-800 leading-relaxed">
+                    {log.description}
+                  </p>
+                  <span className="mt-1 block text-[10px] text-slate-400">
+                    {formatDateTime(log.timestamp)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

@@ -37,14 +37,18 @@ export default function CatalogPage() {
     const q = searchTerm.trim().toLowerCase();
 
     return books
-      .filter((b) => b.is_active !== false)
+      .filter((b) => b.is_active !== false && b.coded_count > 0)
       .filter((book) => {
         const matchesQuery =
           !q ||
           book.title.toLowerCase().includes(q) ||
-          book.author.toLowerCase().includes(q) ||
+          (book.author && book.author.toLowerCase().includes(q)) ||
           book.category_name.toLowerCase().includes(q) ||
-          (book.isbn && book.isbn.toLowerCase().includes(q));
+          (book.isbn && book.isbn.toLowerCase().includes(q)) ||
+          (Array.isArray(book.copies) &&
+            book.copies.some(
+              (c) => c.copy_code && c.copy_code.toLowerCase().includes(q)
+            ));
 
         const matchesCategory =
           selectedCategory === 'ALL' ||

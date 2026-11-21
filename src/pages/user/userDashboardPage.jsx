@@ -46,7 +46,9 @@ export default function UserDashboardPage() {
     0
   );
 
-  const recommendedBooks = books.filter((b) => b.available_stock > 0).slice(0, 4);
+  const recommendedBooks = books
+    .filter((b) => b.is_active !== false && b.coded_count > 0 && b.available_stock > 0)
+    .slice(0, 4);
 
   const handleRequestReturn = async (loanId) => {
     const result = await requestBookReturn(loanId);

@@ -220,11 +220,38 @@ export function LibraryProvider({ children }) {
     return books.map((book) => {
       const cat = categories.find((c) => c.id === Number(book.category_id));
       const cover = book.cover_book || book.cover_image || DEFAULT_BOOK_COVER;
+
+      // Normalize physical copies (`book_copies`)
+      let copies = Array.isArray(book.copies) ? book.copies : [];
+      if (copies.length === 0 && Number(book.total_stock) > 0) {
+        const total = Number(book.total_stock) || 0;
+        const avail = Number(book.available_stock) || 0;
+        copies = Array.from({ length: total }, (_, idx) => ({
+          id: book.id * 100 + idx + 1,
+          book_id: book.id,
+          copy_code: idx < avail ? `UNIPUS-${book.id}-${String(idx + 1).padStart(3, '0')}` : null,
+          status: idx < avail ? 'available' : 'pending_code',
+        }));
+      }
+
+      const codedCount =
+        book.coded_count !== undefined
+          ? Number(book.coded_count)
+          : copies.filter((c) => c.status !== 'pending_code' && Boolean(c.copy_code)).length;
+      const pendingCount =
+        book.pending_count !== undefined
+          ? Number(book.pending_count)
+          : copies.filter((c) => c.status === 'pending_code' || !c.copy_code).length;
+
       return {
         ...book,
         cover_book: cover,
         cover_image: cover,
         category_name: book.category_name || (cat ? cat.name : 'Tanpa Kategori'),
+        copies,
+        coded_count: codedCount,
+        pending_count: pendingCount,
+        is_published_to_catalog: book.is_active !== false && codedCount > 0,
       };
     });
   }, [books, categories]);
@@ -265,14 +292,16 @@ export function LibraryProvider({ children }) {
           items = loan.books.map((b, idx) => {
             const fullBook = enrichedBooks.find((eb) => eb.id === Number(b.id)) || b;
             const cover =
-              fullBook.cover_book || fullBook.cover_image || DEFAULT_BOOK_COVER;
+              b.cover_book || b.cover_image || fullBook.cover_book || fullBook.cover_image || DEFAULT_BOOK_COVER;
             return {
               id: `${loan.id}-${b.id || idx}`,
               loan_id: loan.id,
               book_id: b.id,
+              copy_code: b.copy_code || null,
               quantity: 1,
               book: {
                 ...fullBook,
+                ...b,
                 cover_book: cover,
                 cover_image: cover,
               },
@@ -847,6 +876,9 @@ export function LibraryProvider({ children }) {
     if (isUpdate && bookData.is_active !== undefined) {
       fd.append('is_active', String(Boolean(bookData.is_active)));
     }
+    if (Array.isArray(bookData.copy_codes) && bookData.copy_codes.length > 0) {
+      fd.append('copy_codes', JSON.stringify(bookData.copy_codes));
+    }
     if (bookData.coverFile) {
       fd.append('cover_book', bookData.coverFile);
     }
@@ -854,6 +886,9 @@ export function LibraryProvider({ children }) {
   };
 
   const addBook = async (bookData) => {
+    const cleanCodes = Array.isArray(bookData.copy_codes)
+      ? bookData.copy_codes.map((c) => c.trim()).filter(Boolean)
+      : [];
     const payload = {
       category_id: Number(bookData.category_id) || null,
       title: bookData.title.trim(),
@@ -866,12 +901,13 @@ export function LibraryProvider({ children }) {
         (bookData.cover_book || bookData.cover_image)?.trim() ||
         DEFAULT_BOOK_COVER,
       total_stock: Number(bookData.total_stock),
+      copy_codes: cleanCodes,
     };
 
     try {
       let res;
       if (bookData.coverFile) {
-        const formData = buildBookFormData(bookData, false);
+        const formData = buildBookFormData({ ...bookData, copy_codes: cleanCodes }, false);
         res = await axiosClient.post('/admin/books', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -882,7 +918,10 @@ export function LibraryProvider({ children }) {
       return {
         success: true,
         book: res.data?.book,
-        message: 'Buku baru berhasil ditambahkan ke katalog.',
+        message:
+          cleanCodes.length > 0
+            ? 'Buku dan kode eksemplar berhasil ditambahkan ke katalog.'
+            : 'Data buku tersimpan! Silakan input kode buku satu per satu agar tampil di katalog web.',
       };
     } catch (err) {
       if (err.response) {
@@ -894,17 +933,36 @@ export function LibraryProvider({ children }) {
 
       const now = new Date().toISOString();
       const newId = books.length > 0 ? Math.max(...books.map((b) => b.id)) + 1 : 101;
+      const copies = Array.from({ length: payload.total_stock }, (_, idx) => {
+        const code = cleanCodes[idx] || null;
+        return {
+          id: Date.now() + idx,
+          book_id: newId,
+          copy_code: code,
+          status: code ? 'available' : 'pending_code',
+        };
+      });
       const newBook = {
         id: newId,
         ...payload,
         cover_book: bookData.previewUrl || payload.cover_book,
         is_active: true,
-        available_stock: payload.total_stock,
+        available_stock: cleanCodes.length,
+        coded_count: cleanCodes.length,
+        pending_count: payload.total_stock - cleanCodes.length,
+        copies,
         created_at: now,
         updated_at: now,
       };
       setBooks((prev) => [newBook, ...prev]);
-      return { success: true, book: newBook, message: 'Buku baru berhasil ditambahkan ke katalog.' };
+      return {
+        success: true,
+        book: newBook,
+        message:
+          cleanCodes.length > 0
+            ? 'Buku dan kode eksemplar berhasil ditambahkan ke katalog.'
+            : 'Data buku tersimpan! Silakan input kode buku satu per satu agar tampil di katalog web.',
+      };
     }
   };
 
@@ -997,6 +1055,118 @@ export function LibraryProvider({ children }) {
 
       setBooks((prev) => prev.filter((b) => b.id !== Number(bookId)));
       return { success: true, message: 'Buku berhasil dihapus dari katalog.' };
+    }
+  };
+
+  // 8b. Assign Copy Codes (`PATCH /api/admin/books/:id/assign-codes`)
+  const assignBookCopyCodes = async (bookId, copyCodesInput) => {
+    const cleanCodes = (Array.isArray(copyCodesInput) ? copyCodesInput : [copyCodesInput])
+      .map((c) => String(c).trim())
+      .filter(Boolean);
+
+    if (cleanCodes.length === 0) {
+      return { success: false, message: 'Masukkan minimal 1 kode buku.' };
+    }
+
+    try {
+      const res = await axiosClient.patch(`/admin/books/${bookId}/assign-codes`, {
+        copy_codes: cleanCodes,
+      });
+      await syncFromBackend();
+      return {
+        success: true,
+        book: res.data?.book,
+        message: res.data?.message || 'Kode buku berhasil disimpan & buku kini tampil di katalog!',
+      };
+    } catch (err) {
+      if (err.response) {
+        return {
+          success: false,
+          message: err.response.data?.message || 'Gagal menyimpan kode buku.',
+        };
+      }
+
+      // Offline fallback
+      setBooks((prev) =>
+        prev.map((b) => {
+          if (b.id !== Number(bookId)) return b;
+          const existingCopies = Array.isArray(b.copies) ? [...b.copies] : [];
+          let codeIdx = 0;
+          const updatedCopies = existingCopies.map((copy) => {
+            if ((copy.status === 'pending_code' || !copy.copy_code) && codeIdx < cleanCodes.length) {
+              const assigned = cleanCodes[codeIdx++];
+              return { ...copy, copy_code: assigned, status: 'available' };
+            }
+            return copy;
+          });
+          const availCount = updatedCopies.filter((c) => c.status === 'available').length;
+          const codedCount = updatedCopies.filter((c) => c.status !== 'pending_code' && Boolean(c.copy_code)).length;
+          const pendingCount = updatedCopies.length - codedCount;
+          return {
+            ...b,
+            copies: updatedCopies,
+            available_stock: availCount,
+            coded_count: codedCount,
+            pending_count: pendingCount,
+          };
+        })
+      );
+      return {
+        success: true,
+        message: 'Kode buku berhasil disimpan & buku kini tampil di katalog!',
+      };
+    }
+  };
+
+  // 8c. Update Individual Book Copy (`PATCH /api/admin/book-copies/:id`)
+  const updateSingleBookCopy = async (copyId, { copy_code, status }) => {
+    const trimmedCode = (copy_code || '').trim();
+    if (!trimmedCode) {
+      return { success: false, message: 'Kode buku tidak boleh kosong.' };
+    }
+
+    try {
+      const payload = { copy_code: trimmedCode };
+      if (status && status !== 'pending_code') {
+        payload.status = status;
+      }
+      await axiosClient.patch(`/admin/book-copies/${copyId}`, payload);
+      await syncFromBackend();
+      return { success: true, message: 'Kode eksemplar buku berhasil diperbarui.' };
+    } catch (err) {
+      if (err.response) {
+        return {
+          success: false,
+          message: err.response.data?.message || 'Gagal memperbarui kode buku.',
+        };
+      }
+
+      setBooks((prev) =>
+        prev.map((b) => {
+          if (!Array.isArray(b.copies)) return b;
+          const hasCopy = b.copies.some((c) => c.id === Number(copyId));
+          if (!hasCopy) return b;
+          const updatedCopies = b.copies.map((c) =>
+            c.id === Number(copyId)
+              ? {
+                  ...c,
+                  copy_code: trimmedCode,
+                  status: status && status !== 'pending_code' ? status : 'available',
+                }
+              : c
+          );
+          const availCount = updatedCopies.filter((c) => c.status === 'available').length;
+          const codedCount = updatedCopies.filter((c) => c.status !== 'pending_code' && Boolean(c.copy_code)).length;
+          return {
+            ...b,
+            copies: updatedCopies,
+            available_stock: availCount,
+            coded_count: codedCount,
+            pending_count: updatedCopies.length - codedCount,
+          };
+        })
+      );
+      return { success: true, message: 'Kode eksemplar buku berhasil diperbarui.' };
     }
   };
 
@@ -1202,6 +1372,8 @@ export function LibraryProvider({ children }) {
         addBook,
         updateBook,
         deleteBook,
+        assignBookCopyCodes,
+        updateSingleBookCopy,
         addCategory,
         updateCategory,
         deleteCategory,

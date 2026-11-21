@@ -122,6 +122,11 @@ export default function LoanDetailModal({ loan, onClose }) {
                     <p className="text-xs text-slate-500">
                       {item.book?.author} • ISBN: {item.book?.isbn || '-'}
                     </p>
+                    {(item.copy_code || item.book?.copy_code) && (
+                      <span className="mt-1 inline-block rounded-md border border-[#89CFF3] bg-[#CDF5FD]/70 px-2 py-0.5 font-mono text-[11px] font-bold text-[#0088CC]">
+                        Kode Buku: {item.copy_code || item.book?.copy_code}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

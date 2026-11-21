@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookCheck, Calendar, Eye, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { BookCheck, Eye, CheckCircle2 } from 'lucide-react';
 import { useLibrary } from '../../context/libraryContext';
 import { useToast } from '../../context/toastContext';
 import { LOAN_STATUS } from '../../utils/constants';
@@ -8,12 +8,10 @@ import LoanStatusBadge from '../../components/common/loanStatusBadge';
 import LoanDetailModal from '../../components/loans/loanDetailModal';
 
 export default function ActiveLoansAdminPage() {
-  const { loans, updateLoanDueDate, confirmBookReturn, handoverLoan } = useLibrary();
+  const { loans, confirmBookReturn, handoverLoan } = useLibrary();
   const { showToast } = useToast();
 
   const [selectedLoan, setSelectedLoan] = useState(null);
-  const [editingDueLoan, setEditingDueLoan] = useState(null);
-  const [newDueDate, setNewDueDate] = useState('');
 
   const activeLoans = loans.filter(
     (l) =>
@@ -21,16 +19,6 @@ export default function ActiveLoansAdminPage() {
       l.status === LOAN_STATUS.BORROWED ||
       l.status === LOAN_STATUS.OVERDUE
   );
-
-  const handleSaveDueDate = (e) => {
-    e.preventDefault();
-    if (!editingDueLoan || !newDueDate) return;
-    const res = updateLoanDueDate(editingDueLoan.id, newDueDate);
-    if (res.success) {
-      showToast(res.message, 'success');
-      setEditingDueLoan(null);
-    }
-  };
 
   const handleHandover = async (loanId) => {
     const res = await handoverLoan(loanId);
@@ -57,7 +45,7 @@ export default function ActiveLoansAdminPage() {
           Monitoring Peminjaman Aktif & Keterlambatan
         </h1>
         <p className="mt-1 text-xs sm:text-sm text-slate-600">
-          Pantau seluruh transaksi peminjaman berjalan, identifikasi keterlambatan (Overdue), serta atur ulang batas waktu pengembalian (PRD 6.8).
+          Pantau seluruh transaksi peminjaman berjalan, penyerahan buku, dan status keterlambatan pengembalian.
         </p>
       </div>
 
@@ -131,27 +119,12 @@ export default function ActiveLoansAdminPage() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingDueLoan(loan);
-                              setNewDueDate(
-                                loan.due_date ? loan.due_date.slice(0, 10) : ''
-                              );
-                            }}
-                            className="btn-outline px-2.5 py-1.5 text-xs"
-                            title="Atur Tanggal Pengembalian"
-                          >
-                            <Calendar className="h-3.5 w-3.5 text-[#00A9FF]" />
-                            Atur Due Date
-                          </button>
-
                           {loan.status === LOAN_STATUS.APPROVED ? (
                             <button
                               type="button"
                               onClick={() => handleHandover(loan.id)}
                               className="btn-primary px-3 py-1.5 text-xs"
-                              title="PATCH /api/admin/loans/:id/handover"
+                              title="Konfirmasi penyerahan buku fisik kepada peminjam"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Serahkan Buku (Handover)
@@ -171,6 +144,7 @@ export default function ActiveLoansAdminPage() {
                             type="button"
                             onClick={() => setSelectedLoan(loan)}
                             className="btn-outline px-2.5 py-1.5 text-xs"
+                            title="Lihat detail peminjaman"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
@@ -181,50 +155,6 @@ export default function ActiveLoansAdminPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Due Date Modal */}
-      {editingDueLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setEditingDueLoan(null)}
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
-          />
-          <div className="relative z-10 w-full max-w-sm rounded-3xl border border-[#89CFF3] bg-white p-6 shadow-2xl">
-            <h3 className="text-base font-extrabold text-slate-900">
-              Atur Batas Waktu Pengembalian
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Transaksi: {editingDueLoan.transaction_code} ({editingDueLoan.user_name})
-            </p>
-            <form onSubmit={handleSaveDueDate} className="mt-4 space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">
-                  Tanggal Batas Pengembalian Baru
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={newDueDate}
-                  onChange={(e) => setNewDueDate(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingDueLoan(null)}
-                  className="btn-outline"
-                >
-                  Batal
-                </button>
-                <button type="submit" className="btn-primary">
-                  Simpan Tanggal
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -32,7 +32,7 @@ export default function ReturnConfirmPage() {
           Konfirmasi Pengembalian Buku
         </h1>
         <p className="mt-1 text-xs sm:text-sm text-slate-600">
-          Verifikasi pengajuan pengembalian dari User (berstatus <strong>Return Requested</strong>). Saat dikonfirmasi, status berubah menjadi <strong>Returned</strong> dan stok buku otomatis bertambah (PRD 6.4 & FR-11).
+          Verifikasi pengajuan pengembalian dari anggota (berstatus <strong>Return Requested</strong>). Saat dikonfirmasi, status berubah menjadi <strong>Returned</strong> dan stok buku otomatis bertambah.
         </p>
       </div>
 
@@ -75,7 +75,8 @@ export default function ReturnConfirmPage() {
                   <div>
                     <p className="text-sm font-bold text-slate-900">{loan.user_name}</p>
                     <p className="text-xs text-slate-500">
-                      {loan.user_member_id} • {loan.user_department}
+                      NIM: {loan.user_nim || loan.user_member_id || '-'}
+                      {loan.user_email ? ` • ${loan.user_email}` : ''}
                     </p>
                   </div>
                 </div>
